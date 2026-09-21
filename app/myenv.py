@@ -6,6 +6,7 @@ readme.
 Delete this docstring and describe your own world instead.
 """
 
+from collections import deque
 import random
 import numpy as np
 import gymnasium as gym
@@ -24,15 +25,29 @@ class MyEnv(gym.Env):
         self.CONST_WORLD_X = 10
         self.CONST_WORLD_Y = self.CONST_WORLD_X
 
+        self.CONST_DIR_MAP = {
+            0: "UP",
+            1: "DOWN",
+            2: "LEFT",
+            3: "RIGHT",
+        }
+
+        self.prev_dir = -1
         self.world_state = [[]]
+        self.snake = deque([])
         self.reset_world()
 
         # TODO: set the two spaces. Both must be Discrete.
 
+        ##  0: BLANK
+        ##  1: FRUIT
+        ##  2: HEAD
+        ##  3: BODY
+        ##  4: TAIL
         self.observation_space = spaces.Box(
-            low=0,high=5,shape=(self.CONST_WORLD_X,self.CONST_WORLD_Y),dtype=np.uint8
+            low=0,high=4,shape=(self.CONST_WORLD_X,self.CONST_WORLD_Y),dtype=np.uint8
         )
-        self.action_space = spaces.Discrete(self.CONST_DIRECTIONS, start=2)
+        self.action_space = spaces.Discrete(self.CONST_DIRECTIONS)
 
         if render_mode is not None and render_mode not in self.metadata["render_modes"]:
             raise ValueError(f"unsupported render_mode: {render_mode}")
@@ -40,6 +55,8 @@ class MyEnv(gym.Env):
 
     def _get_obs(self):
         return self.world_state
+    def _get_info(self):
+        return {"snake_deque": self.snake, "prev_dir": self.prev_dir}
 
     def reset(self, seed: int | None = None, options: dict | None = None):
         # This line seeds self.np_random. Without it, seeding does not work and
@@ -60,71 +77,215 @@ class MyEnv(gym.Env):
         # wrapper from register() handle running out of time. The agent treats
         # the two differently, and so should you.
 
-        ##  TODO:: PSEUDO-CODE
-        ##  for x in world_length
-        ##      for y in world_height
-        ##          head_exists = false
-        ##          if cell[x][y] > 1, is snake
-        ##              facing init
-        ##              match cell[x][y]
-        ##                  case 2 is up
-        ##                      if y is 0, terminate, subtract point
-        ##                      facing = cell[x][y-1]
-        ##                  case 3 is right
-        ##                      if x = world_length, terminate, subtract point
-        ##                      facing = cell[x+1][y]
-        ##                  case 4 is down
-        ##                      if y = world_height, terminate, subtract point
-        ##                      facing = cell[x][y+1]
-        ##                  case 5 is left
-        ##                      if x = 0, terminate, subtract point
-        ##                      facing = cell[x-1][y]
-        ##              
-        ##              if facing > 1, is snake, is body
-        ##              elif facing < 2, is good
-        ##                  if facing is 1, is fruit
-        ##                      add point
-        ##                      todo increase
-        ##                  
-        ##                  
-        ##      if head_exists is false, is dead
-        ##          terminate, subtract point
-        
+        reward = 0
+        terminated = False
+        truncated = False
 
-        raise NotImplementedError
+        ## NOTE:: Tracking world status.
+        status_count, head_pos, tail_pos = self.world_status()
+        if status_count[0] == 0:
+            terminated = True
+            reward = 1
+        ## NOTE:: Spawning new fruit if none exists.
+        if status_count[1] == 0:
+            ## Spawn random amount of fruit from at least 1 to at most half of the current length or blanks left, whichever is greater.
+            fruit_count = min(status_count[0], self.np_random.integers(1, int((status_count[2] + status_count[3] + status_count[4]) / 2) + 1))
+            self.spawn_random_fruit(fruit_count)
+
+        ##  NOTE:: Moving the snake.
+        ##  Preventing the snake from turning into itself.
+        if action == 0: # UP
+            if self.prev_dir == 1:
+                action = 1
+        elif action == 1: # DOWN
+            if self.prev_dir == 0:
+                action = 0
+        elif action == 2: # LEFT
+            if self.prev_dir == 3:
+                action = 3
+        elif action == 3: # RIGHT
+            if self.prev_dir == 2:
+                action = 2
+        self.prev_dir = action
+
+        ##  Set new head position based on the action taken.
+        new_pos = head_pos
+        if action == 0: # UP
+            new_pos = (head_pos[0], head_pos[1]-1)
+        elif action == 1: # DOWN
+            new_pos = (head_pos[0], head_pos[1]+1)
+        elif action == 2: # LEFT
+            new_pos = (head_pos[0]-1, head_pos[1])
+        elif action == 3: # RIGHT
+            new_pos = (head_pos[0]+1, head_pos[1])
+
+        ##  Update the world state based on the new head position.
+        ##  Boundary: DEAD
+        if new_pos[0] < 0 or new_pos[0] >= self.CONST_WORLD_X or new_pos[1] < 0 or new_pos[1] >= self.CONST_WORLD_Y:
+            # self.world_state[tail_pos[0]][tail_pos[1]] = 0
+            # self.world_state[head_pos[0]][head_pos[1]] = 3
+
+            
+            # Remove the old tail
+            old_tail = self.snake.popleft()
+            self.world_state[old_tail[0]][old_tail[1]] = 0
+
+            # The old head becomes body
+            old_head = self.snake[-1]
+            self.world_state[old_head[0]][old_head[1]] = 3
+
+            # Mark the new tail
+            new_tail = self.snake[0]
+            self.world_state[new_tail[0]][new_tail[1]] = 4
+
+            terminated = True
+            reward = -1
+        ##  Blank: MOVE
+        elif self.world_state[new_pos[0]][new_pos[1]] == 0:
+            # self.world_state[head_pos[0]][head_pos[1]] = 3
+            # self.world_state[new_pos[0]][new_pos[1]] = 2
+            # self.world_state[tail_pos[0]][tail_pos[1]] = 0
+            
+            # Remove the old tail
+            old_tail = self.snake.popleft()
+            self.world_state[old_tail[0]][old_tail[1]] = 0
+
+            # The old head becomes body
+            old_head = self.snake[-1]
+            self.world_state[old_head[0]][old_head[1]] = 3
+
+            # Add the new head
+            self.snake.append(new_pos)
+            self.world_state[new_pos[0]][new_pos[1]] = 2
+
+            # Mark the new tail
+            new_tail = self.snake[0]
+            self.world_state[new_tail[0]][new_tail[1]] = 4
+        ##  Fruit: EAT
+        elif self.world_state[new_pos[0]][new_pos[1]] == 1:
+            # self.world_state[head_pos[0]][head_pos[1]] = 3
+            # self.world_state[new_pos[0]][new_pos[1]] = 2
+
+            # Old head becomes body
+            old_head = self.snake[-1]
+            self.world_state[old_head[0]][old_head[1]] = 3
+
+            # Add the new head
+            self.snake.append(new_pos)
+            self.world_state[new_pos[0]][new_pos[1]] = 2
+            
+            reward = 1
+        ##  Body: DEAD
+        elif self.world_state[new_pos[0]][new_pos[1]] == 3:
+            # self.world_state[tail_pos[0]][tail_pos[1]] = 0
+            # self.world_state[head_pos[0]][head_pos[1]] = 3
+            # self.world_state[new_pos[0]][new_pos[1]] = 2
+
+            # Remove the old tail
+            old_tail = self.snake.popleft()
+            self.world_state[old_tail[0]][old_tail[1]] = 0
+
+            # The old head becomes body
+            old_head = self.snake[-1]
+            self.world_state[old_head[0]][old_head[1]] = 3
+
+            # Add the new head
+            self.snake.append(new_pos)
+            self.world_state[new_pos[0]][new_pos[1]] = 2
+
+            # Mark the new tail
+            new_tail = self.snake[0]
+            self.world_state[new_tail[0]][new_tail[1]] = 4
+
+            terminated = True
+            reward = -1
+
+        # raise NotImplementedError
+        return self._get_obs(), reward, terminated, truncated, self._get_info()
 
     def render(self):
         """Return a readable picture of the current state, as a string."""
         if self.render_mode != "ansi":
             return None
         # TODO: draw it. You need this for the sample episode in your report.
-        raise NotImplementedError
+        TL_CORNER = "╔"
+        TR_CORNER = "╗"
+        BL_CORNER = "╚"
+        BR_CORNER = "╝"
+        HORIZONTAL = "═"
+        VERTICAL = "║"
+
+        rendered = TL_CORNER + HORIZONTAL * self.CONST_WORLD_X + TR_CORNER + "\n"
+        for y in range(0, self.CONST_WORLD_Y):
+            rendered += VERTICAL
+            for x in range(0, self.CONST_WORLD_X):
+                if self.world_state[x][y] == 0:
+                    rendered += "."
+                elif self.world_state[x][y] == 1:
+                    rendered += "@"
+                elif self.world_state[x][y] == 2:
+                    rendered += "H"
+                elif self.world_state[x][y] == 3:
+                    rendered += "B"
+                elif self.world_state[x][y] == 4:
+                    rendered += "T"
+            rendered += VERTICAL + "\n"
+        rendered += BL_CORNER + HORIZONTAL * self.CONST_WORLD_X + BR_CORNER + "\n"
+        rendered += VERTICAL + f"Last Move: {self.CONST_DIR_MAP.get(self.prev_dir, 'UNKNOWN')}" + "\n"
+        rendered += BL_CORNER + HORIZONTAL * self.CONST_WORLD_X + BR_CORNER
+
+        # raise NotImplementedError
+        return rendered
 
     def close(self):
         pass
 
+    def world_status(self) -> tuple[list[int], tuple[int,int], tuple[int,int]]:
+        status_count = [0,0,0,0,0]
+        head_pos = (-1,-1)
+        tail_pos = (-1,-1)
+        for y in range(0, self.CONST_WORLD_Y):
+            for x in range(0, self.CONST_WORLD_X):
+                status_count[self.world_state[x][y]] += 1
+                if self.world_state[x][y] == 2:
+                    head_pos = (x, y)
+                elif self.world_state[x][y] == 4:
+                    tail_pos = (x, y)
+        return status_count, head_pos, tail_pos
+
     def reset_world(self):
+        self.prev_dir = -1
         self.world_state = [
             [0 for x in range(0, self.CONST_WORLD_X)]
             for y in range(0, self.CONST_WORLD_Y)
         ]
+        self.snake = deque([])
 
     def random_spawn(self):
-        start_x = random.randint(1,self.CONST_WORLD_X-2)
-        start_y = random.randint(1, self.CONST_WORLD_Y-2)
+        start_x = self.np_random.integers(1, self.CONST_WORLD_X-2)
+        start_y = self.np_random.integers(1, self.CONST_WORLD_Y-2)
 
-        ## TODO:: Revisit.  Directions start at 2.  2==UP. 3==RIGHT. 4==DOWN.  5==LEFT.
-        ##          -  This is because 0==BLANK.  1==FRUIT.
-        start_dir = random.randint(2, 2+self.CONST_DIRECTIONS-1)
+        self.world_state[start_x][start_y] = 2
+        self.world_state[start_x-1][start_y] = 4
+        self.snake.append((start_x, start_y))
+        self.snake.appendleft((start_x-1, start_y))
 
-        self.world_state[start_x][start_y] = start_dir
+    def spawn_random_fruit(self, fruit_count:int):
+        for i in range(0, fruit_count):
+            fruit_x = self.np_random.integers(1, self.CONST_WORLD_X-1)
+            fruit_y = self.np_random.integers(1, self.CONST_WORLD_Y-1)
+
+            if self.world_state[fruit_x][fruit_y] == 0:
+                self.world_state[fruit_x][fruit_y] = 1
+            else:
+                i -= 1
 
 
 # TODO: name your environment. The id must start with "cs272/" and end with a
 # version, and max_episode_steps must be large enough that a competent agent can
 # finish but small enough that a lost one gives up.
 register(
-    id="cs272/MyEnv-v0",
+    id="cs272/PA2-Snake-v0",
     entry_point="myenv:MyEnv",
     max_episode_steps=300,
 )

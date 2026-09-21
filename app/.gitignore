@@ -1,0 +1,11 @@
+.vscode/*
+*.pyc
+bin/*
+Scripts/*
+include/*
+lib/*
+Lib/**
+share/*
+**.cfg
+**/.DS_Store
+*/__pycache__/*
