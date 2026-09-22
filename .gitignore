@@ -8,4 +8,6 @@ Lib/**
 share/*
 **.cfg
 **/.DS_Store
+.DS_Store
 */__pycache__/*
+*.cfg

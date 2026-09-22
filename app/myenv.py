@@ -7,7 +7,6 @@ Delete this docstring and describe your own world instead.
 """
 
 from collections import deque
-import random
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -82,7 +81,7 @@ class MyEnv(gym.Env):
         truncated = False
 
         ## NOTE:: Tracking world status.
-        status_count, head_pos, tail_pos = self.world_status()
+        status_count = self.world_status()
         if status_count[0] == 0:
             terminated = True
             reward = 1
@@ -109,23 +108,19 @@ class MyEnv(gym.Env):
         self.prev_dir = action
 
         ##  Set new head position based on the action taken.
-        new_pos = head_pos
+        new_pos = self.snake[-1]
         if action == 0: # UP
-            new_pos = (head_pos[0], head_pos[1]-1)
+            new_pos = (self.snake[-1][0], self.snake[-1][1]-1)
         elif action == 1: # DOWN
-            new_pos = (head_pos[0], head_pos[1]+1)
+            new_pos = (self.snake[-1][0], self.snake[-1][1]+1)
         elif action == 2: # LEFT
-            new_pos = (head_pos[0]-1, head_pos[1])
+            new_pos = (self.snake[-1][0]-1, self.snake[-1][1])
         elif action == 3: # RIGHT
-            new_pos = (head_pos[0]+1, head_pos[1])
+            new_pos = (self.snake[-1][0]+1, self.snake[-1][1])
 
         ##  Update the world state based on the new head position.
         ##  Boundary: DEAD
         if new_pos[0] < 0 or new_pos[0] >= self.CONST_WORLD_X or new_pos[1] < 0 or new_pos[1] >= self.CONST_WORLD_Y:
-            # self.world_state[tail_pos[0]][tail_pos[1]] = 0
-            # self.world_state[head_pos[0]][head_pos[1]] = 3
-
-            
             # Remove the old tail
             old_tail = self.snake.popleft()
             self.world_state[old_tail[0]][old_tail[1]] = 0
@@ -142,10 +137,6 @@ class MyEnv(gym.Env):
             reward = -1
         ##  Blank: MOVE
         elif self.world_state[new_pos[0]][new_pos[1]] == 0:
-            # self.world_state[head_pos[0]][head_pos[1]] = 3
-            # self.world_state[new_pos[0]][new_pos[1]] = 2
-            # self.world_state[tail_pos[0]][tail_pos[1]] = 0
-            
             # Remove the old tail
             old_tail = self.snake.popleft()
             self.world_state[old_tail[0]][old_tail[1]] = 0
@@ -163,9 +154,6 @@ class MyEnv(gym.Env):
             self.world_state[new_tail[0]][new_tail[1]] = 4
         ##  Fruit: EAT
         elif self.world_state[new_pos[0]][new_pos[1]] == 1:
-            # self.world_state[head_pos[0]][head_pos[1]] = 3
-            # self.world_state[new_pos[0]][new_pos[1]] = 2
-
             # Old head becomes body
             old_head = self.snake[-1]
             self.world_state[old_head[0]][old_head[1]] = 3
@@ -177,10 +165,6 @@ class MyEnv(gym.Env):
             reward = 1
         ##  Body: DEAD
         elif self.world_state[new_pos[0]][new_pos[1]] == 3:
-            # self.world_state[tail_pos[0]][tail_pos[1]] = 0
-            # self.world_state[head_pos[0]][head_pos[1]] = 3
-            # self.world_state[new_pos[0]][new_pos[1]] = 2
-
             # Remove the old tail
             old_tail = self.snake.popleft()
             self.world_state[old_tail[0]][old_tail[1]] = 0
@@ -242,16 +226,17 @@ class MyEnv(gym.Env):
 
     def world_status(self) -> tuple[list[int], tuple[int,int], tuple[int,int]]:
         status_count = [0,0,0,0,0]
-        head_pos = (-1,-1)
-        tail_pos = (-1,-1)
+        # head_pos = (-1,-1)
+        # tail_pos = (-1,-1)
         for y in range(0, self.CONST_WORLD_Y):
             for x in range(0, self.CONST_WORLD_X):
                 status_count[self.world_state[x][y]] += 1
-                if self.world_state[x][y] == 2:
-                    head_pos = (x, y)
-                elif self.world_state[x][y] == 4:
-                    tail_pos = (x, y)
-        return status_count, head_pos, tail_pos
+                # if self.world_state[x][y] == 2:
+                #     head_pos = (x, y)
+                # elif self.world_state[x][y] == 4:
+                #     tail_pos = (x, y)
+        # return status_count, head_pos, tail_pos
+        return status_count
 
     def reset_world(self):
         self.prev_dir = -1
