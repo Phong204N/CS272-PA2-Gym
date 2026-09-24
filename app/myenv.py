@@ -1,9 +1,19 @@
-"""Task 1: your own custom Gymnasium environment.
+"""
+This environment emulates the classic game of snake.
+The "snake" is a series of tiles with a head and a body. 
+It can move in cardinal directions and grow.
 
-Design the world yourself. The requirements it has to meet are in the assignment
-readme.
+To play, an agent must select 1 of 4 actions for every step.  Up, Down, Left, or Right.
+This selects where the head moves next.  The rest of the body follows sequentially.  
 
-Delete this docstring and describe your own world instead.
+Fruits are items that spawn and add an extra length of 1 tile to the snake when consumed.
+At every step, if no previous fruits are present, a capped, random number of fruits will spawn.
+
+The goal is for the agent to reach a maximum length, filling up all the squares, without a collision.
+A collision with a wall/boundary, or its own body will terminate the game.
+
+In a normal snake game, a human player would also be challenged by the ability of their reaction to avoid collision while planning their route. 
+Since the agent needs to be "plugged" into the game, observing the world and being able to act at each step, this is not an issue.
 """
 
 from collections import deque
@@ -14,12 +24,17 @@ from gymnasium.envs.registration import register
 
 
 class MyEnv(gym.Env):
-    """TODO: one line on what this world is and what the agent is trying to do."""
+    """This environment resembles the classic snake game where an agent must choose 1 of 4 directions and collect 'fruits' to grow while avoiding collisions."""
 
     metadata = {"render_modes": ["ansi"], "render_fps": 4}
 
     def __init__(self, render_mode: str | None = None):
-        # TODO: describe your world here -- the map, the pieces, the constants.
+        ##  The map is a square grid of 10x10 tiles.  
+        ##      -   The observation space is a 10x10 box.
+        ##  The player is a series of connected tiles, or "the snake".
+        ##  The snake traverses 1 tile per step, in any 4 cardinal directions, except opposite of it's current direction.
+        ##     -    The action space is a discrete space of 4.
+        ##  "Fruits" take up a tile each, and spawn via a random function.
         self.CONST_DIRECTIONS = 4
         self.CONST_WORLD_X = 10
         self.CONST_WORLD_Y = self.CONST_WORLD_X
@@ -31,12 +46,11 @@ class MyEnv(gym.Env):
             3: "RIGHT",
         }
 
+        ##  Initialization
         self.prev_dir = -1
         self.world_state = [[]]
         self.snake = deque([])
         self.reset_world()
-
-        # TODO: set the two spaces. Both must be Discrete.
 
         ##  0: BLANK
         ##  1: FRUIT
@@ -62,64 +76,57 @@ class MyEnv(gym.Env):
         # the reproducibility test fails.
         super().reset(seed=seed)
 
-        # TODO: put the world back to its starting state.
         self.reset_world()
         self.random_spawn()
 
         return self._get_obs(), self._get_info()
 
     def step(self, action: int):
-        # TODO: apply the action, with noise drawn from self.np_random.
-        #
-        # Return terminated=True when the episode genuinely ends -- goal reached,
-        # agent died, game over. Leave truncated as False and let the TimeLimit
-        # wrapper from register() handle running out of time. The agent treats
-        # the two differently, and so should you.
-
         reward = 0
         terminated = False
         truncated = False
 
-        ## NOTE:: Tracking world status.
+        ## Tracking world status.
         status_count = self.world_status()
         if status_count[0] == 0:
             terminated = True
             reward = 1
-        ## NOTE:: Spawning new fruit if none exists.
+        ## Spawning new fruit if none exists.
         if status_count[1] == 0:
-            ## Spawn random amount of fruit from at least 1 to at most half of the current length or blanks left, whichever is greater.
+            ## Spawn random amount of fruit from at least 1 to half of the current length.  If the number of blanks left are less, fill up those blanks instead.
             fruit_count = min(status_count[0], self.np_random.integers(1, int((status_count[2] + status_count[3] + status_count[4]) / 2) + 1))
             self.spawn_random_fruit(fruit_count)
 
-        ##  NOTE:: Moving the snake.
+        ##  Moving the snake.
         ##  Preventing the snake from turning into itself.
-        if action == 0: # UP
+        ##  For example, if it was moving down, it can not suddenly move up.
+        if action == 0: ## UP
             if self.prev_dir == 1:
                 action = 1
-        elif action == 1: # DOWN
+        elif action == 1: ## DOWN
             if self.prev_dir == 0:
                 action = 0
-        elif action == 2: # LEFT
+        elif action == 2: ## LEFT
             if self.prev_dir == 3:
                 action = 3
-        elif action == 3: # RIGHT
+        elif action == 3: ## RIGHT
             if self.prev_dir == 2:
                 action = 2
         self.prev_dir = action
 
         ##  Set new head position based on the action taken.
         new_pos = self.snake[-1]
-        if action == 0: # UP
+        if action == 0: ## UP
             new_pos = (self.snake[-1][0], self.snake[-1][1]-1)
-        elif action == 1: # DOWN
+        elif action == 1: ## DOWN
             new_pos = (self.snake[-1][0], self.snake[-1][1]+1)
-        elif action == 2: # LEFT
+        elif action == 2: ## LEFT
             new_pos = (self.snake[-1][0]-1, self.snake[-1][1])
-        elif action == 3: # RIGHT
+        elif action == 3: ## RIGHT
             new_pos = (self.snake[-1][0]+1, self.snake[-1][1])
 
         ##  Update the world state based on the new head position.
-        ##  Boundary: DEAD
+        ##  Case: Boundary=DEAD
         if new_pos[0] < 0 or new_pos[0] >= self.CONST_WORLD_X or new_pos[1] < 0 or new_pos[1] >= self.CONST_WORLD_Y:
             # Remove the old tail
             old_tail = self.snake.popleft()
@@ -135,7 +142,7 @@ class MyEnv(gym.Env):
 
             terminated = True
             reward = -1
-        ##  Blank: MOVE
+        ##  Case: Blank=MOVE
         elif self.world_state[new_pos[0]][new_pos[1]] == 0:
             # Remove the old tail
             old_tail = self.snake.popleft()
@@ -152,7 +159,7 @@ class MyEnv(gym.Env):
             # Mark the new tail
             new_tail = self.snake[0]
             self.world_state[new_tail[0]][new_tail[1]] = 4
-        ##  Fruit: EAT
+        ##  Case: Fruit=EAT
         elif self.world_state[new_pos[0]][new_pos[1]] == 1:
             # Old head becomes body
             old_head = self.snake[-1]
@@ -163,7 +170,7 @@ class MyEnv(gym.Env):
             self.world_state[new_pos[0]][new_pos[1]] = 2
             
             reward = 1
-        ##  Body: DEAD
+        ##  Case: Body=DEAD
         elif self.world_state[new_pos[0]][new_pos[1]] == 3:
             # Remove the old tail
             old_tail = self.snake.popleft()
@@ -184,41 +191,44 @@ class MyEnv(gym.Env):
             terminated = True
             reward = -1
 
-        # raise NotImplementedError
         return self._get_obs(), reward, terminated, truncated, self._get_info()
 
     def render(self):
         """Return a readable picture of the current state, as a string."""
         if self.render_mode != "ansi":
             return None
-        # TODO: draw it. You need this for the sample episode in your report.
+
         TL_CORNER = "╔"
         TR_CORNER = "╗"
         BL_CORNER = "╚"
         BR_CORNER = "╝"
         HORIZONTAL = "═"
         VERTICAL = "║"
+        BLANK = "."
+        FRUIT = "@"
+        HEAD = "H"
+        BODY = "B"
+        TAIL = "T"
 
         rendered = TL_CORNER + HORIZONTAL * self.CONST_WORLD_X + TR_CORNER + "\n"
         for y in range(0, self.CONST_WORLD_Y):
             rendered += VERTICAL
             for x in range(0, self.CONST_WORLD_X):
                 if self.world_state[x][y] == 0:
-                    rendered += "."
+                    rendered += BLANK
                 elif self.world_state[x][y] == 1:
-                    rendered += "@"
+                    rendered += FRUIT
                 elif self.world_state[x][y] == 2:
-                    rendered += "H"
+                    rendered += HEAD
                 elif self.world_state[x][y] == 3:
-                    rendered += "B"
+                    rendered += BODY
                 elif self.world_state[x][y] == 4:
-                    rendered += "T"
+                    rendered += TAIL
             rendered += VERTICAL + "\n"
         rendered += BL_CORNER + HORIZONTAL * self.CONST_WORLD_X + BR_CORNER + "\n"
         rendered += VERTICAL + f"Last Move: {self.CONST_DIR_MAP.get(self.prev_dir, 'UNKNOWN')}" + "\n"
         rendered += BL_CORNER + HORIZONTAL * self.CONST_WORLD_X + BR_CORNER
 
-        # raise NotImplementedError
         return rendered
 
     def close(self):
