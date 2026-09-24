@@ -49,9 +49,10 @@ class MyEnv(gym.Env):
         ##  Initialization
         self.prev_dir = -1
         self.world_state = [[]]
-        self.snake = deque([])
+        self.snake = deque([]) #coordinates of the snake
         self.reset_world()
 
+        # each board cell stores a value
         ##  0: BLANK
         ##  1: FRUIT
         ##  2: HEAD
@@ -67,7 +68,7 @@ class MyEnv(gym.Env):
         self.render_mode = render_mode
 
     def _get_obs(self):
-        return self.world_state
+        return self.world_state #returns the current board
     def _get_info(self):
         return {"snake_deque": self.snake, "prev_dir": self.prev_dir}
 
@@ -87,8 +88,8 @@ class MyEnv(gym.Env):
         truncated = False
 
         ## Tracking world status.
-        status_count = self.world_status()
-        if status_count[0] == 0:
+        status_count = self.world_status() #count how many cells contain blank, fruit, head, etc
+        if status_count[0] == 0: #no blank squares left, win statement
             terminated = True
             reward = 1
         ## Spawning new fruit if none exists.
@@ -128,17 +129,21 @@ class MyEnv(gym.Env):
         ##  Update the world state based on the new head position.
         ##  Case: Boundary=DEAD
         if new_pos[0] < 0 or new_pos[0] >= self.CONST_WORLD_X or new_pos[1] < 0 or new_pos[1] >= self.CONST_WORLD_Y:
-            # Remove the old tail
-            old_tail = self.snake.popleft()
-            self.world_state[old_tail[0]][old_tail[1]] = 0
+            
+            #I commented this part bc i think unnecessary since snake is dead you dont care about dropping the tail or creating the tail? game reset will take care of it
+            
+            # # Remove the old tail
+            # old_tail = self.snake.popleft()
+            # self.world_state[old_tail[0]][old_tail[1]] = 0
 
-            # The old head becomes body
-            old_head = self.snake[-1]
-            self.world_state[old_head[0]][old_head[1]] = 3
+            
+            # # The old head becomes body
+            # old_head = self.snake[-1]
+            # self.world_state[old_head[0]][old_head[1]] = 3
 
-            # Mark the new tail
-            new_tail = self.snake[0]
-            self.world_state[new_tail[0]][new_tail[1]] = 4
+            # # Mark the new tail
+            # new_tail = self.snake[0]
+            # self.world_state[new_tail[0]][new_tail[1]] = 4
 
             terminated = True
             reward = -1
@@ -173,20 +178,22 @@ class MyEnv(gym.Env):
         ##  Case: Body=DEAD
         elif self.world_state[new_pos[0]][new_pos[1]] == 3:
             # Remove the old tail
-            old_tail = self.snake.popleft()
-            self.world_state[old_tail[0]][old_tail[1]] = 0
+            # again unnecessary
+            
+            # old_tail = self.snake.popleft()
+            # self.world_state[old_tail[0]][old_tail[1]] = 0
 
-            # The old head becomes body
-            old_head = self.snake[-1]
-            self.world_state[old_head[0]][old_head[1]] = 3
+            # # The old head becomes body
+            # old_head = self.snake[-1]
+            # self.world_state[old_head[0]][old_head[1]] = 3
 
-            # Add the new head
-            self.snake.append(new_pos)
-            self.world_state[new_pos[0]][new_pos[1]] = 2
+            # # Add the new head
+            # self.snake.append(new_pos)
+            # self.world_state[new_pos[0]][new_pos[1]] = 2
 
-            # Mark the new tail
-            new_tail = self.snake[0]
-            self.world_state[new_tail[0]][new_tail[1]] = 4
+            # # Mark the new tail
+            # new_tail = self.snake[0]
+            # self.world_state[new_tail[0]][new_tail[1]] = 4
 
             terminated = True
             reward = -1
@@ -265,13 +272,13 @@ class MyEnv(gym.Env):
         self.snake.append((start_x, start_y))
         self.snake.appendleft((start_x-1, start_y))
 
-    def spawn_random_fruit(self, fruit_count:int):
+    def spawn_random_fruit(self, fruit_count:int): 
         for i in range(0, fruit_count):
             fruit_x = self.np_random.integers(1, self.CONST_WORLD_X-1)
             fruit_y = self.np_random.integers(1, self.CONST_WORLD_Y-1)
 
-            if self.world_state[fruit_x][fruit_y] == 0:
-                self.world_state[fruit_x][fruit_y] = 1
+            if self.world_state[fruit_x][fruit_y] == 0: #place at the blank cell
+                self.world_state[fruit_x][fruit_y] = 1 #occupied
             else:
                 i -= 1
 
