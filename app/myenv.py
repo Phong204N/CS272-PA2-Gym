@@ -91,7 +91,7 @@ class MyEnv(gym.Env):
         status_count = self.world_status() #count how many cells contain blank, fruit, head, etc
         if status_count[0] == 0: #no blank squares left, win statement
             terminated = True
-            reward = 1
+            reward = 10
         ## Spawning new fruit if none exists.
         if status_count[1] == 0:
             ## Spawn random amount of fruit from at least 1 to half of the current length.  If the number of blanks left are less, fill up those blanks instead.
@@ -146,7 +146,7 @@ class MyEnv(gym.Env):
             # self.world_state[new_tail[0]][new_tail[1]] = 4
 
             terminated = True
-            reward = -1
+            reward = -10
         ##  Case: Blank=MOVE
         elif self.world_state[new_pos[0]][new_pos[1]] == 0:
             # Remove the old tail
@@ -196,7 +196,7 @@ class MyEnv(gym.Env):
             # self.world_state[new_tail[0]][new_tail[1]] = 4
 
             terminated = True
-            reward = -1
+            reward = -10
 
         return self._get_obs(), reward, terminated, truncated, self._get_info()
 
