@@ -1,26 +1,32 @@
 import csv
-import numpy as np
+
+import gymnasium as gym
 import matplotlib.pyplot as plt
+import numpy as np
 
 from myagent import SarsaLambdaAgent
-import gymnasium as gym
 
-# I tested againts a different game bc we shouldnt be importing our game anyway
+
 def make_env(render_mode=None):
+    """
+    Create the tabular environment used for Task 2.
+    """
+
     return gym.make(
         "FrozenLake-v1",
         is_slippery=False,
         render_mode=render_mode
     )
 
+
 LAMBDAS = [0.0, 0.3, 0.6, 0.9, 1.0]
 SEEDS = [0, 1, 2, 3, 4]
 
-
-SMOOTHING_WINDOW = 100
-TARGET_RETURN = 1.0
-FINAL_WINDOW = 100
 TOTAL_EPISODES = 1000
+SMOOTHING_WINDOW = 100
+TARGET_RETURN = 0.8
+FINAL_WINDOW = 100
+
 
 def smooth(values, window):
     """Return a moving average of the values."""
@@ -42,7 +48,8 @@ def run_lambda_sweep():
     Train one fresh agent for every lambda and seed.
 
     Returns:
-        Dictionary mapping lambda values to arrays with shape:
+        Dictionary mapping each lambda to an array with shape:
+
         (number of seeds, number of episodes)
     """
 
@@ -59,7 +66,7 @@ def run_lambda_sweep():
             # Create a fresh environment for every experiment.
             env = make_env()
 
-            # Seed the environment.
+            # Set the environment seed.
             env.reset(seed=seed)
 
             agent = SarsaLambdaAgent(
@@ -97,10 +104,17 @@ def make_learning_curve_plot(results):
             for run in data
         ])
 
+        # Average the smoothed curves across seeds.
         mean_curve = smoothed_runs.mean(axis=0)
+
+        # Standard deviation across seeds.
         std_curve = smoothed_runs.std(axis=0)
 
-        episodes = np.arange(len(mean_curve))
+        # The first moving-average point represents episode 99.
+        episodes = np.arange(
+            SMOOTHING_WINDOW - 1,
+            len(data[0])
+        )
 
         plt.plot(
             episodes,
@@ -117,11 +131,14 @@ def make_learning_curve_plot(results):
 
     plt.xlabel("Episode")
     plt.ylabel("Mean return")
+
     plt.title(
-        f"SARSA(lambda) Learning Curves "
-        f"({len(SEEDS)} seeds, {SMOOTHING_WINDOW}-episode smoothing)"
+        "SARSA(lambda) Learning Curves "
+        f"({len(SEEDS)} seeds, "
+        f"{SMOOTHING_WINDOW}-episode smoothing)"
     )
 
+    plt.ylim(0, 1.05)
     plt.legend()
     plt.grid(alpha=0.3)
     plt.tight_layout()
@@ -133,12 +150,15 @@ def make_learning_curve_plot(results):
 
     plt.show()
 
+    print("\nSaved plot to lambda_learning_curves.png")
+
 
 def find_first_target_episode(values, target):
     """
-    Find the first episode where the mean curve reaches target.
+    Find the first index where the curve reaches the target.
 
-    Returns None if the target is never reached.
+    Returns:
+        None if the target is never reached.
     """
 
     reached = np.where(values >= target)[0]
@@ -159,10 +179,10 @@ def create_results_table(results):
     for lam in LAMBDAS:
         data = results[lam]
 
-        # Mean return across seeds for every episode.
+        # Mean return across seeds for each episode.
         mean_curve = data.mean(axis=0)
 
-        # Use a smoothed curve to avoid counting one lucky episode.
+        # Smooth the mean curve.
         smoothed_mean = smooth(
             mean_curve,
             SMOOTHING_WINDOW
@@ -173,9 +193,16 @@ def create_results_table(results):
             TARGET_RETURN
         )
 
-        # Average the final window across all seeds.
+        if first_target is not None:
+            # Convert the smoothed-array index to the real episode number.
+            first_target += SMOOTHING_WINDOW - 1
+
+        # Average the final 100 episodes across all seeds.
         final_data = data[:, -FINAL_WINDOW:]
-        mean_final_return = float(final_data.mean())
+
+        mean_final_return = float(
+            final_data.mean()
+        )
 
         rows.append({
             "lambda": lam,
@@ -211,21 +238,23 @@ def create_results_table(results):
     for row in rows:
         print(
             f"lambda={row['lambda']:<4} | "
-            f"first target episode="
+            f"target episode="
             f"{str(row['first_episode_reaching_target']):<8} | "
             f"mean final return="
             f"{row['mean_final_return']:.3f}"
         )
 
-    print("\nSaved table to lambda_results.csv")
+    print("\nTarget return:", TARGET_RETURN)
+    print("Saved table to lambda_results.csv")
 
 
 def show_greedy_episode(lam=0.9, seed=0):
     """
-    Train one agent and display one greedy episode using ANSI rendering.
+    Train one agent and display one greedy ANSI episode.
     """
 
     env = make_env(render_mode="ansi")
+
     env.reset(seed=seed)
 
     agent = SarsaLambdaAgent(
@@ -239,13 +268,17 @@ def show_greedy_episode(lam=0.9, seed=0):
         seed=seed
     )
 
-    print(f"\nTraining agent for greedy episode, lambda={lam}")
+    print(
+        f"\nTraining greedy agent with lambda={lam}"
+    )
+
     agent.learn()
 
     state, info = env.reset(seed=seed)
 
-    episode = []
     total_return = 0.0
+    terminated = False
+    truncated = False
 
     for step in range(300):
         rendered_state = env.render()
@@ -254,6 +287,7 @@ def show_greedy_episode(lam=0.9, seed=0):
             print(f"\nStep {step}")
             print(rendered_state)
 
+        # Greedy action: exploration is disabled.
         action = agent.eps_greedy(
             state,
             exploration=False
@@ -263,10 +297,6 @@ def show_greedy_episode(lam=0.9, seed=0):
             env.step(action)
         )
 
-        episode.append(
-            (int(state), int(action), float(reward))
-        )
-
         total_return += reward
         state = next_state
 
@@ -274,7 +304,7 @@ def show_greedy_episode(lam=0.9, seed=0):
             break
 
     print("\nGreedy episode return:", total_return)
-    print("Number of steps:", len(episode))
+    print("Number of steps:", step + 1)
     print("Terminated:", terminated)
     print("Truncated:", truncated)
 
@@ -282,12 +312,16 @@ def show_greedy_episode(lam=0.9, seed=0):
 
 
 def main():
+    # Run all lambda values and seeds.
     results = run_lambda_sweep()
 
+    # Create the learning-curve plot.
     make_learning_curve_plot(results)
 
+    # Create the results table.
     create_results_table(results)
 
+    # Show one trained greedy episode.
     show_greedy_episode(
         lam=0.9,
         seed=0
